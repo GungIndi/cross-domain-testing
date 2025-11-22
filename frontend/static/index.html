@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DASH Video Player</title>
+    <!-- The dash.js library -->
+    <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #222; color: #eee; margin: 0; padding: 20px; }
+        #container { max-width: 800px; margin: 20px auto; background-color: #333; padding: 20px; border-radius: 8px; }
+        video { width: 100%; background-color: #000; display: block; }
+        .controls-section { margin-top: 20px; padding-top: 15px; border-top: 1px solid #444; }
+        h3 { color: #0095dd; margin-top: 0; }
+        button { padding: 8px 12px; margin: 4px; cursor: pointer; background-color: #444; color: #eee; border: 1px solid #555; border-radius: 4px; }
+        button.active { background-color: #007bff; border-color: #007bff; color: white; }
+        #now-playing { margin-top: 15px; font-size: 1.1em; }
+        #error-message { color: #ff6b6b; margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <video id="videoPlayer" controls muted autoplay></video>
+        <div id="now-playing">Now Playing: <span id="now-playing-title">None</span></div>
+        <p id="error-message"></p>
+
+        <div class="controls-section">
+            <h3>Available Videos</h3>
+            <div id="video-buttons"></div>
+        </div>
+
+        <div class="controls-section">
+            <h3>Quality Control</h3>
+            <div id="current-quality" style="margin-bottom: 10px; font-weight: bold; font-size: 1.1em;">Currently Playing: --</div>
+            <div id="quality-buttons"></div>
+        </div>
+    </div>
+
+    <!-- The application logic -->
+    <script src="app.js"></script>
+</body>
+</html>
