@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         try {
             dashPlayer = dashjs.MediaPlayer().create();
-            dashPlayer.initialize(videoPlayer, manifestURL, true);
+            dashPlayer.initialize(videoPlayer, manifestURL, false);
             nowPlayingEl.textContent = videoTitle;
 
             // Enable fast quality switching with optimized buffering for 2-second chunks
@@ -32,16 +32,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 'streaming': {
                     'buffer': {
                         'fastSwitchEnabled': true,
-                        'bufferTimeAtTopQuality': 6,        // 6 seconds = 3 chunks of 2s each
                         'bufferTimeAtTopQualityLongForm': 6,
-                        'bufferToKeep': 4                   // Keep 4 seconds behind = 2 chunks
+                        'bufferToKeep': 4
                     },
                     'abr': {
                         'autoSwitchBitrate': {
-                            'video': true
+                            'video': false // We will handle ABR manually
                         },
-                        'maxBitrate': { 'video': 5000 },    // Max 5Mbps
-                        'minBitrate': { 'video': 100 }     // Min 100kbps
+                        'maxBitrate': { 'video': 5000 },
+                        'minBitrate': { 'video': 100 },
+                        'initialBitrate': { 'video': 100 },
+                        'limitBitrateByPortal': false
                     }
                 }
             });
@@ -68,6 +69,119 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // The only thing we do now is parse the manifest ourselves
             parseManifestAndBuildQualityUI(manifestURL);
+
+            // Debug logging for ABR
+            setInterval(() => {
+                if (!dashPlayer) return;
+                
+                const activeStream = dashPlayer.getActiveStream();
+                if (!activeStream) return; // Wait for stream to be active
+
+                const streamInfo = activeStream.getStreamInfo();
+                const dashMetrics = dashPlayer.getDashMetrics();
+                const dashAdapter = dashPlayer.getDashAdapter();
+
+                if (dashMetrics && streamInfo) {
+                    const periodIdx = streamInfo.index;
+                    const repSwitch = dashMetrics.getCurrentRepresentationSwitch('video', true);
+                    const bufferLevel = dashMetrics.getCurrentBufferLevel('video', true);
+                    const bitrate = repSwitch ? Math.round(dashAdapter.getBandwidthForRepresentation(repSwitch.to, periodIdx) / 1000) : 0;
+                    
+                    // Get instantaneous throughput from last request
+                    let throughput = 0;
+                    const lastRequest = dashMetrics.getCurrentHttpRequest('video');
+                    
+                    if (lastRequest && lastRequest.trace && lastRequest.trace.length > 0) {
+                        // Find the last trace entry which typically contains the download completion info
+                        const lastTrace = lastRequest.trace[lastRequest.trace.length - 1];
+                        
+                        // d = duration in ms, b = bytes
+                        if (lastTrace.d > 0 && lastTrace.b && lastTrace.b.length > 0) {
+                            const downloadTimeSeconds = lastTrace.d / 1000;
+                            const bytes = lastTrace.b[0];
+                            const bits = bytes * 8;
+                            throughput = Math.round(bits / downloadTimeSeconds / 1000); // kbps
+                        }
+                    }
+
+                    // Fallback to average if instant calc fails
+                    if (throughput === 0) {
+                        throughput = Math.round(dashPlayer.getAverageThroughput('video') / 1000) || 0;
+                    }
+
+                    const safetyFactor = 0.7;
+                    const safeThroughput = Math.round(throughput * safetyFactor);
+                    
+                    console.log(`[Stats] Buffer: ${bufferLevel.toFixed(1)}s | Quality: ${repSwitch ? repSwitch.to : 'N/A'} (${bitrate} kbps) | Speed: ${throughput} kbps | Manual: ${manuallySelectedQuality}`);
+
+                    // --- CUSTOM ABR LOGIC ---
+                    // Only run if user hasn't manually selected a quality (Auto mode)
+                    if (manuallySelectedQuality === null && repSwitch) {
+                        const now = Date.now();
+                        const currentQualityIndex = repSwitch.to;
+                        
+                        // Debug log
+                        // console.log(`[Custom ABR Check] Manual: ${manuallySelectedQuality}, Index: ${currentQualityIndex}, Speed: ${throughput}, Cooldown: ${!window.lastSwitchTime || (now - window.lastSwitchTime > 3000)}`);
+
+                        if (!window.lastSwitchTime || (now - window.lastSwitchTime > 3000)) { // 3s cooldown
+                            
+                            // Rule: Switch DOWN if speed < 3000 kbps
+                            if (throughput > 0 && throughput < 3000 && currentQualityIndex == 0) {
+                                console.log(`[Custom ABR] Attempting switch DOWN. Speed: ${throughput} < 3000`);
+                                
+                                // Find low quality ID from our buttons (since API is missing)
+                                const buttons = Array.from(document.querySelectorAll('#quality-buttons button[data-quality-index]'));
+                                // Sort by index (High=0, Low=1...)
+                                buttons.sort((a, b) => parseInt(a.dataset.qualityIndex) - parseInt(b.dataset.qualityIndex));
+                                
+                                if (buttons.length > 1) {
+                                    const lowQualityBtn = buttons[1]; // Index 1 is lower
+                                    const lowQualityId = lowQualityBtn.dataset.qualityId;
+                                    
+                                    console.log(`[Custom ABR] Switching to ID: ${lowQualityId} (${lowQualityBtn.textContent})`);
+                                    dashPlayer.setRepresentationForTypeById('video', lowQualityId);
+                                    
+                                    // FORCE UPDATE: Seek to current time to flush buffer and show new quality immediately
+                                    dashPlayer.seek(videoPlayer.currentTime);
+                                    
+                                    window.lastSwitchTime = now;
+                                    updateQualityDisplay('Auto (Switching Down...)');
+                                } else {
+                                    console.log('[Custom ABR] Could not find quality buttons to switch down');
+                                }
+                            }
+                            
+                            // Rule: Switch UP if speed > 3500 kbps
+                            else if (throughput > 3500 && currentQualityIndex > 0) {
+                                console.log(`[Custom ABR] Attempting switch UP. Speed: ${throughput} > 3500`);
+                                
+                                const buttons = Array.from(document.querySelectorAll('#quality-buttons button[data-quality-index]'));
+                                buttons.sort((a, b) => parseInt(a.dataset.qualityIndex) - parseInt(b.dataset.qualityIndex));
+                                
+                                if (buttons.length > 0) {
+                                    const highQualityBtn = buttons[0]; // Index 0 is highest
+                                    const highQualityId = highQualityBtn.dataset.qualityId;
+                                    
+                                    console.log(`[Custom ABR] Switching to ID: ${highQualityId} (${highQualityBtn.textContent})`);
+                                    dashPlayer.setRepresentationForTypeById('video', highQualityId);
+                                    
+                                    // FORCE UPDATE: Seek to current time to flush buffer and show new quality immediately
+                                    dashPlayer.seek(videoPlayer.currentTime);
+                                    
+                                    window.lastSwitchTime = now;
+                                    updateQualityDisplay('Auto (Switching Up...)');
+                                }
+                            }
+                        }
+                    } else {
+                        // Log if skipping ABR due to manual selection
+                        if (manuallySelectedQuality !== null) {
+                             // console.log('[Custom ABR] Skipped: Manual quality selected');
+                        }
+                    }
+                    // ------------------------
+                }
+            }, 1000);
 
         } catch (e) {
             displayError(`Failed to initialize DASH player: ${e.message}`);
