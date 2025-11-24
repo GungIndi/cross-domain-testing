@@ -1,51 +1,303 @@
-# Simple Video Streaming App for Specialized Testing
+# Video Streaming Application - Cross-Domain Testing Demo
 
-This project demonstrates three distinct, specialized testing strategies in the context of a simple video streaming application built with a Go-based microservices architecture.
+A minimal video streaming system demonstrating cross-domain testing strategies across Application, Architecture, and Environment layers.
 
+## Quick Start
 
-## 1. Architecture
+### 1. Install Dependencies
 
-The architecture is simplified to two core microservices written in Go:
+```bash
+# Install Node.js dependencies
+make install-deps
 
-*   **`video-catalog-service`**: A Go service that acts as the video catalog. It has a single API endpoint (`/videos`) that provides metadata about available videos.
+# Or manually install
+npm install puppeteer
+brew install k6  # macOS
+# apt-get install k6  # Linux
+```
 
-*   **`streaming-service`**: A Go service responsible for the actual video streaming. It serves video files and supports HTTP Range Requests to simulate chunk-based streaming.
+### 2. Run the Application
 
-## 2. Technology Stack
+**Option A: Using Makefile (Recommended)**
 
-*   **Backend**: Go (using the standard library for simplicity and performance)
-*   **Containerization**: Docker
-*   **Deployment**: Google Cloud Run
-*   **Testing Tools**:
-    *   Pact-Go (for Contract Testing)
-    *   k6 (for Load Testing)
-    *   Go's built-in testing library (for the custom integrity test)
+```bash
+# Start all services with Docker
+make demo
 
-## 3. The Three Specialized Testing Strategies
+# Or start individually in separate terminals
+make run-frontend    # Terminal 1
+make run-catalog     # Terminal 2
+make run-streaming   # Terminal 3
+```
 
-This is the core focus of the project.
+**Option B: Manual Go**
 
-### Strategy 1: Microservice Architecture Test (Contract Testing)
+```bash
+# Terminal 1 - Frontend
+cd frontend && go run main.go
 
-*   **Goal**: To ensure our microservices can evolve independently without breaking each other. We will test the API contract between our two services.
-*   **Implementation**:
-    1.  We will define a "consumer" relationship, where the `streaming-service` needs information from the `video-catalog-service`.
-    2.  Using **Pact-Go**, we will write a test in the `streaming-service` (the consumer) that defines the exact JSON structure it expects from the `video-catalog-service`'s `/videos` endpoint. This generates a `pact` file (the contract).
-    3.  The `video-catalog-service` (the provider) will then run a verification test against this `pact` file to guarantee it honors the contract.
+# Terminal 2 - Catalog
+cd apps/video-catalog-service && go run main.go
 
-### Strategy 2: Video Streaming Platform Test (Chunk-Based Integrity Test)
+# Terminal 3 - Streaming
+cd apps/streaming-service && go run main.go
+```
 
-*   **Goal**: To verify the reliability of the video delivery mechanism, mimicking how a real video player works.
-*   **Implementation**:
-    1.  We will create a custom test for the `streaming-service` using Go's standard testing library.
-    2.  This test will act as a client and make a series of **HTTP Range Requests** to download a video file in small, sequential chunks.
-    3.  After all chunks are downloaded, the test will reassemble them in memory.
-    4.  Finally, it will calculate a **SHA256 checksum** of the reassembled file and assert that it matches the checksum of the original file on disk, proving that the streaming delivery was flawless.
+### 3. Access the Application
 
-### Strategy 3: Cloud Environment Test (Scalability Load Test)
+Open your browser: **http://localhost:8000**
 
-*   **Goal**: To test the auto-scaling capabilities of our specialized cloud environment (Google Cloud Run).
-*   **Implementation**:
-    1.  The `streaming-service` will be packaged as a Docker container and deployed to **Google Cloud Run**.
-    2.  Using **k6**, we will write a script to simulate a sudden, massive traffic spike (e.g., 500+ virtual users trying to stream a video simultaneously).
-    3.  We will execute the k6 script and observe the Google Cloud Run metrics, watching it automatically scale up the number of container instances to handle the load. The test results will report on performance and error rates under pressure.
+### 4. Run Tests
+
+```bash
+# Run all automated tests
+make test-all
+
+# Or run individually
+make test-missing-segment    # Scenario 1
+make test-abr                # Scenario 2
+make test-load               # Scenario 3
+```
+
+## Architecture
+
+```
+┌─────────────────┐
+│  Web Browser    │  ← Application Domain
+│  (dash.js ABR)  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────────────────────┐
+│  Microservices                  │  ← Architecture Domain
+│  • Frontend (8000)              │
+│  • Catalog (8080)               │
+│  • Streaming (8081)             │
+└────────┬────────────────────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Cloud Run /    │  ← Environment Domain
+│  Docker         │
+└─────────────────┘
+```
+
+## Project Structure
+
+```
+demo-specialized-testing/
+├── Makefile                    # All commands here!
+├── README.md                   # This file
+├── frontend/                   # Frontend service
+│   ├── Dockerfile
+│   ├── main.go
+│   └── static/
+│       ├── index.html
+│       └── app.js
+├── apps/
+│   ├── video-catalog-service/  # Catalog API
+│   │   ├── Dockerfile
+│   │   └── main.go
+│   └── streaming-service/      # Video streaming service
+│       ├── Dockerfile
+│       ├── main.go
+│       ├── videos/             # Original videos
+│       └── videos_dash/        # DASH segments
+├── tests/                      # Automated test scripts
+│   ├── README.md
+|   ├── TEST_CASES.md           # Detailed test specifications
+│   ├── scenario1-missing-segment.sh
+│   ├── scenario2-abr-test.js
+│   ├── scenario3-load-test.js
+│   └── run-all-tests.sh
+└── ops/                        # Deployment & operations
+    ├── README.md
+    ├── docker-compose.yml
+    ├── deploy-to-cloudrun.sh
+    ├── cleanup-cloudrun.sh
+    └── CLOUD_RUN_DEPLOYMENT.md
+```
+
+## Makefile Commands
+
+Run `make help` to see all available commands:
+
+### Development
+- `make run-frontend` - Start frontend service
+- `make run-catalog` - Start catalog service
+- `make run-streaming` - Start streaming service
+- `make build-all` - Build all Go binaries
+- `make status` - Check service health
+
+### Docker
+- `make demo` - Quick demo with Docker (recommended)
+- `make docker-build` - Build Docker images
+- `make docker-up` - Start all services
+- `make docker-down` - Stop all services
+- `make docker-logs` - View logs
+
+### Testing
+- `make test-all` - Run all test scenarios
+- `make test-missing-segment` - Test missing segment handling
+- `make test-abr` - Test ABR quality switching
+- `make test-load` - Load test with k6
+
+### Cloud Run
+- `make deploy` - Deploy to Google Cloud Run
+- `make deploy-streaming` - Deploy streaming service only
+- `make cloud-logs` - View Cloud Run logs
+- `make clean-cloudrun` - Delete Cloud Run resources
+
+### Cleanup
+- `make clean` - Remove build artifacts
+- `make clean-docker` - Remove Docker resources
+
+## Testing Scenarios
+
+### Scenario 1: Missing Segment (Application × Architecture × Environment)
+
+Tests error propagation when a video segment is missing.
+
+```bash
+make test-missing-segment
+```
+
+**Expected:** 404 error, player skips/buffers, service stays healthy.
+
+### Scenario 2: Network Latency (Environment × Application)
+
+Tests ABR quality switching under throttled network.
+
+```bash
+make test-abr
+```
+
+**Expected:** Quality switches from 720p → 240p when throttled, back to 720p when restored.
+
+### Scenario 3: Scalability (Architecture × Environment)
+
+Tests autoscaling under load (40 concurrent users).
+
+```bash
+make test-load
+```
+
+**Expected:** < 10% errors, p95 latency < 3s, service scales up.
+
+## Cloud Run Deployment
+
+### Prerequisites
+
+1. Google Cloud account with billing
+2. `gcloud` CLI installed
+3. Set environment variables:
+
+```bash
+export GCP_PROJECT_ID="your-project-id"
+export GCP_REGION="us-central1"
+```
+
+### Deploy
+
+```bash
+# Deploy all services
+make deploy GCP_PROJECT_ID=your-project-id
+
+# Or use the script directly
+cd ops && ./deploy-to-cloudrun.sh
+```
+
+### Test Autoscaling
+
+```bash
+# Run load test against Cloud Run
+make test-load-cloud STREAMING_URL=https://streaming-service-xxx.run.app
+
+# Monitor in Cloud Console
+make cloud-metrics
+```
+
+See `ops/CLOUD_RUN_DEPLOYMENT.md` for detailed instructions.
+
+## Technology Stack
+
+- **Backend:** Go 1.21+
+- **Frontend:** HTML5, JavaScript, dash.js
+- **Video:** MPEG-DASH (2-second segments)
+- **Containerization:** Docker
+- **Cloud:** Google Cloud Run
+- **Testing:** k6, Puppeteer, Bash
+
+## Key Features
+
+✅ **Custom ABR Logic** - Manual adaptive bitrate control  
+✅ **Cross-Domain Testing** - Tests spanning multiple layers  
+✅ **Automated Tests** - No manual browser interaction needed  
+✅ **Docker Support** - Local testing with docker-compose  
+✅ **Cloud Run Ready** - Autoscaling demonstration  
+✅ **Comprehensive Docs** - Test cases, deployment guides  
+
+## Documentation
+
+- **[TEST_CASES.md](TEST_CASES.md)** - Detailed test case specifications
+- **[ops/CLOUD_RUN_DEPLOYMENT.md](ops/CLOUD_RUN_DEPLOYMENT.md)** - Cloud deployment guide
+- **[tests/README.md](tests/README.md)** - Test automation guide
+
+## Troubleshooting
+
+### Services not starting
+
+```bash
+# Check if ports are in use
+lsof -i :8000
+lsof -i :8080
+lsof -i :8081
+
+# Kill processes if needed
+kill -9 <PID>
+```
+
+### Video segments missing
+
+```bash
+# Regenerate DASH files
+make generate-dash
+```
+
+### Docker issues
+
+```bash
+# Reset Docker
+make clean-docker
+make docker-build
+```
+
+### Test failures
+
+```bash
+# Ensure all services are running
+make status
+
+# Check logs
+make docker-logs
+```
+
+## Contributing
+
+This is a demo project for educational purposes. Feel free to:
+- Add more test scenarios
+- Improve ABR algorithm
+- Add more video qualities
+- Enhance monitoring
+
+## License
+
+MIT License - Educational purposes
+
+## Author
+
+Cross-Domain Testing Demo Project
+
+---
+
+**Need help?** Run `make help` to see all available commands!
