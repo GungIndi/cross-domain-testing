@@ -1,0 +1,186 @@
+/**
+ * Test Case TC-CD-003: Scalability Load Test
+ * Domain: Architecture × Environment
+ * 
+ * This test uses k6 to simulate concurrent users and measure performance.
+ * 
+ * Prerequisites:
+ * - k6 installed (https://k6.io/docs/getting-started/installation/)
+ * - Streaming service running
+ * 
+ * Usage:
+ *   k6 run tests/scenario3-load-test.js
+ */
+
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate, Trend, Counter } from 'k6/metrics';
+
+// Custom metrics
+const errorRate = new Rate('errors');
+const mpdLoadTime = new Trend('mpd_load_time');
+const chunkLoadTime = new Trend('chunk_load_time');
+const totalRequests = new Counter('total_requests');
+
+// Test configuration
+export const options = {
+  stages: [
+    { duration: '10s', target: 10 },   // Warm up: 0 -> 10 users
+    { duration: '20s', target: 40 },   // Ramp up: 10 -> 40 users
+    { duration: '30s', target: 40 },   // Sustained load: 40 users
+    { duration: '10s', target: 0 },    // Ramp down: 40 -> 0 users
+  ],
+  
+  thresholds: {
+    'http_req_duration': ['p(95)<3000'],      // 95% of requests < 3s
+    'http_req_failed': ['rate<0.1'],          // Error rate < 10%
+    'errors': ['rate<0.1'],                   // Custom error rate < 10%
+    'mpd_load_time': ['p(95)<1000'],          // MPD loads in < 1s (p95)
+    'chunk_load_time': ['p(95)<2000'],        // Chunks load in < 2s (p95)
+  },
+};
+
+// Configuration
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:8081';
+const VIDEOS = ['video1', 'video2'];
+
+export function setup() {
+  console.log(`
+========================================
+TC-CD-003: Load Test Starting
+========================================
+Target: ${BASE_URL}
+VUs: 0 -> 10 -> 40 -> 40 -> 0
+Duration: 70 seconds
+========================================
+  `);
+  
+  // Verify service is accessible
+  const res = http.get(`${BASE_URL}/stream/video1/stream.mpd`);
+  if (res.status !== 200) {
+    throw new Error(`Service not accessible: ${res.status}`);
+  }
+  
+  console.log('✓ Service is accessible');
+  console.log('');
+}
+
+export default function () {
+  // Select random video
+  const video = VIDEOS[Math.floor(Math.random() * VIDEOS.length)];
+  
+  // ===== REQUEST 1: MPD Manifest =====
+  const mpdStart = Date.now();
+  const mpdRes = http.get(`${BASE_URL}/stream/${video}/stream.mpd`, {
+    tags: { name: 'MPD Manifest' },
+  });
+  
+  const mpdDuration = Date.now() - mpdStart;
+  mpdLoadTime.add(mpdDuration);
+  totalRequests.add(1);
+  
+  const mpdSuccess = check(mpdRes, {
+    'MPD status is 200': (r) => r.status === 200,
+    'MPD is valid XML': (r) => r.body.includes('<MPD'),
+    'MPD contains AdaptationSet': (r) => r.body.includes('AdaptationSet'),
+  });
+  
+  if (!mpdSuccess) {
+    errorRate.add(1);
+  }
+  
+  // ===== REQUEST 2: Init Segment (High Quality) =====
+  const initRes = http.get(`${BASE_URL}/stream/${video}/init-stream0.m4s`, {
+    tags: { name: 'Init Segment' },
+  });
+  
+  totalRequests.add(1);
+  
+  check(initRes, {
+    'Init segment status is 200': (r) => r.status === 200,
+    'Init segment size > 0': (r) => r.body.length > 0,
+  });
+  
+  // ===== REQUEST 3-5: Video Chunks (Simulate watching) =====
+  for (let i = 1; i <= 3; i++) {
+    const chunkNum = String(i).padStart(5, '0');
+    
+    const chunkStart = Date.now();
+    const chunkRes = http.get(
+      `${BASE_URL}/stream/${video}/chunk-stream0-${chunkNum}.m4s`,
+      { tags: { name: `Chunk ${i}` } }
+    );
+    
+    const chunkDuration = Date.now() - chunkStart;
+    chunkLoadTime.add(chunkDuration);
+    totalRequests.add(1);
+    
+    const chunkSuccess = check(chunkRes, {
+      [`Chunk ${i} status is 200`]: (r) => r.status === 200,
+      [`Chunk ${i} size > 100KB`]: (r) => r.body.length > 100 * 1024,
+    });
+    
+    if (!chunkSuccess) {
+      errorRate.add(1);
+    }
+    
+    // Simulate watching time (2-second segments)
+    sleep(1 + Math.random()); // 1-2 seconds between chunks
+  }
+  
+  // ===== REQUEST 6: Audio Chunk =====
+  const audioRes = http.get(`${BASE_URL}/stream/${video}/chunk-stream2-00001.m4s`, {
+    tags: { name: 'Audio Chunk' },
+  });
+  
+  totalRequests.add(1);
+  
+  check(audioRes, {
+    'Audio chunk status is 200': (r) => r.status === 200,
+  });
+}
+
+export function teardown(data) {
+  console.log(`
+========================================
+TC-CD-003: Load Test Completed
+========================================
+  `);
+}
+
+export function handleSummary(data) {
+  const metrics = data.metrics;
+  
+  const summary = {
+    'Total Requests': metrics.total_requests.values.count,
+    'HTTP Errors': metrics.http_req_failed.values.rate * 100,
+    'Avg Response Time': metrics.http_req_duration.values.avg.toFixed(2),
+    'p95 Response Time': metrics.http_req_duration.values['p(95)'].toFixed(2),
+    'p99 Response Time': metrics.http_req_duration.values['p(99)'].toFixed(2),
+    'MPD p95 Load Time': metrics.mpd_load_time.values['p(95)'].toFixed(2),
+    'Chunk p95 Load Time': metrics.chunk_load_time.values['p(95)'].toFixed(2),
+  };
+  
+  console.log('\n========== PERFORMANCE SUMMARY ==========');
+  for (const [key, value] of Object.entries(summary)) {
+    const unit = key.includes('Time') ? 'ms' : key.includes('Errors') ? '%' : '';
+    console.log(`${key}: ${value}${unit}`);
+  }
+  console.log('=========================================\n');
+  
+  // Determine pass/fail
+  const passed = 
+    metrics.http_req_failed.values.rate < 0.1 &&
+    metrics.http_req_duration.values['p(95)'] < 3000;
+  
+  if (passed) {
+    console.log('✓ PASS: Load test completed successfully\n');
+  } else {
+    console.log('✗ FAIL: Performance thresholds not met\n');
+  }
+  
+  return {
+    'stdout': JSON.stringify(data, null, 2),
+    'summary.json': JSON.stringify(data),
+  };
+}
