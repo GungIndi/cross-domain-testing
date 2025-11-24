@@ -61,23 +61,23 @@ build-all: build-frontend build-catalog build-streaming ## Build all services
 
 docker-build: ## Build all Docker images locally
 	@echo "$(BLUE)Building Docker images...$(NC)"
-	@docker-compose -f ops/docker-compose.yml build
+	@docker compose -f ops/docker-compose.yml build
 	@echo "$(GREEN)✓ Docker images built$(NC)"
 
 docker-up: ## Start all services with Docker Compose
 	@echo "$(BLUE)Starting services with Docker Compose...$(NC)"
-	@docker-compose -f ops/docker-compose.yml up -d
+	@docker compose -f ops/docker-compose.yml up -d
 	@echo "$(GREEN)✓ Services started$(NC)"
 	@echo "  Frontend:  http://localhost:8000"
 	@echo "  Catalog:   http://localhost:8080"
 	@echo "  Streaming: http://localhost:8081"
 
 docker-down: ## Stop all Docker services
-	@docker-compose -f ops/docker-compose.yml down
+	@docker compose -f ops/docker-compose.yml down
 	@echo "$(GREEN)✓ Services stopped$(NC)"
 
 docker-logs: ## View Docker logs
-	@docker-compose -f ops/docker-compose.yml logs -f
+	@docker compose -f ops/docker-compose.yml logs -f
 
 docker-test: ## Build and test locally with Docker
 	@chmod +x ops/test-docker-local.sh
@@ -165,7 +165,7 @@ clean: ## Remove built binaries
 
 clean-docker: ## Remove Docker images and containers
 	@echo "$(BLUE)Cleaning Docker resources...$(NC)"
-	@docker-compose -f ops/docker-compose.yml down -v
+	@docker compose -f ops/docker-compose.yml down -v
 	@docker system prune -f
 	@echo "$(GREEN)✓ Docker resources cleaned$(NC)"
 
