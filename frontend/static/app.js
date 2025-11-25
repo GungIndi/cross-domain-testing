@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const nowPlayingEl = document.getElementById('now-playing-title');
     const errorMessageEl = document.getElementById('error-message');
     const currentQualityEl = document.getElementById('current-quality');
-    const catalogURL = 'http://localhost:8080/videos';
+    const catalogURL = (window.CATALOG_URL || 'http://localhost:8080') + '/videos';
 
     let dashPlayer = null;
     let currentVideoId = null;
@@ -32,12 +32,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 'streaming': {
                     'buffer': {
                         'fastSwitchEnabled': true,
-                        'bufferTimeAtTopQualityLongForm': 6,
-                        'bufferToKeep': 4
+                        'bufferTimeAtTopQualityLongForm': 2,
+                        'bufferToKeep': 1
                     },
                     'abr': {
                         'autoSwitchBitrate': {
-                            'video': false // We will handle ABR manually
+                            'video': false // handle ABR manually
                         },
                         'maxBitrate': { 'video': 5000 },
                         'minBitrate': { 'video': 100 },
