@@ -1,20 +1,55 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 )
 
+// CORS middleware to allow all origins
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Max-Age", "3600")
+		
+		// Handle preflight OPTIONS request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
-	// Serve files from the "static" directory
+	// Serve dynamic config with environment variables
+	http.HandleFunc("/config.js", func(w http.ResponseWriter, r *http.Request) {
+		catalogURL := os.Getenv("CATALOG_URL")
+		if catalogURL == "" {
+			catalogURL = "http://localhost:8080" // Default for local development
+		}
+		
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		fmt.Fprintf(w, "window.CATALOG_URL = '%s';\n", catalogURL)
+	})
+
+	// Serve files from the "static" directory with CORS
 	fs := http.FileServer(http.Dir("./static"))
+	http.Handle("/", corsMiddleware(fs))
 
-	// Handle all requests by passing them to the file server
-	http.Handle("/", fs)
+	// Use PORT from environment or default to 8000
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8000"
+	}
 
-	// Start the server on port 8000
-	log.Println("Frontend server listening on http://localhost:8000 ...")
-	err := http.ListenAndServe(":8000", nil)
+	log.Printf("Frontend server listening on port %s...\n", port)
+	err := http.ListenAndServe(":"+port, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
