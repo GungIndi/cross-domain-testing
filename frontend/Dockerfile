@@ -1,11 +1,7 @@
 # Frontend Service Dockerfile
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
-
-# Copy go mod files
-COPY go.mod go.sum* ./
-RUN go mod download || true
 
 # Copy source code
 COPY . .
@@ -23,8 +19,8 @@ WORKDIR /root/
 # Copy binary from builder
 COPY --from=builder /app/frontend .
 
-# Copy static files
-COPY static ./static
+# Copy static files from source
+COPY --from=builder /app/static ./static
 
 # Expose port
 EXPOSE 8080
