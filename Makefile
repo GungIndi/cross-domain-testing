@@ -83,6 +83,12 @@ docker-test: ## Build and test locally with Docker
 	@chmod +x ops/test-docker-local.sh
 	@ops/test-docker-local.sh
 
+docker-remove: ## Remove all Docker resources
+	@docker compose -f ops/docker-compose.yml down -v --rmi all
+
+docker-reload: docker-down docker-remove docker-build docker-up
+	@echo "$(GREEN)✓ All services reloaded$(NC)"
+
 ##@ Testing
 
 test-all: ## Run all test scenarios
@@ -166,7 +172,7 @@ clean: ## Remove built binaries
 clean-docker: ## Remove Docker images and containers
 	@echo "$(BLUE)Cleaning Docker resources...$(NC)"
 	@docker compose -f ops/docker-compose.yml down -v
-	@docker system prune -f
+# 	@docker system prune -f
 	@echo "$(GREEN)✓ Docker resources cleaned$(NC)"
 
 clean-cloudrun: ## Delete all Cloud Run services and images
