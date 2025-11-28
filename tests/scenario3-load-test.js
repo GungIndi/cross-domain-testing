@@ -151,14 +151,18 @@ TC-CD-003: Load Test Completed
 export function handleSummary(data) {
   const metrics = data.metrics;
   
+  // Helper function to safely get metric value
+  const getMetricValue = (value, decimals = 2) => {
+    return value != null ? value.toFixed(decimals) : 'N/A';
+  };
+  
   const summary = {
-    'Total Requests': metrics.total_requests.values.count,
-    'HTTP Errors': metrics.http_req_failed.values.rate * 100,
-    'Avg Response Time': metrics.http_req_duration.values.avg.toFixed(2),
-    'p95 Response Time': metrics.http_req_duration.values['p(95)'].toFixed(2),
-    'p99 Response Time': metrics.http_req_duration.values['p(99)'].toFixed(2),
-    'MPD p95 Load Time': metrics.mpd_load_time.values['p(95)'].toFixed(2),
-    'Chunk p95 Load Time': metrics.chunk_load_time.values['p(95)'].toFixed(2),
+    'Total Requests': metrics.total_requests?.values?.count ?? 0,
+    'HTTP Errors': ((metrics.http_req_failed?.values?.rate ?? 0) * 100).toFixed(2),
+    'Avg Response Time': getMetricValue(metrics.http_req_duration?.values?.avg),
+    'p95 Response Time': getMetricValue(metrics.http_req_duration?.values?.['p(95)']),
+    'MPD p95 Load Time': getMetricValue(metrics.mpd_load_time?.values?.['p(95)']),
+    'Chunk p95 Load Time': getMetricValue(metrics.chunk_load_time?.values?.['p(95)']),
   };
   
   console.log('\n========== PERFORMANCE SUMMARY ==========');
@@ -168,19 +172,35 @@ export function handleSummary(data) {
   }
   console.log('=========================================\n');
   
-  // Determine pass/fail
-  const passed = 
-    metrics.http_req_failed.values.rate < 0.1 &&
-    metrics.http_req_duration.values['p(95)'] < 3000;
+  // Create human-readable text summary
+  let textSummary = '\n';
+  textSummary += '==========================================\n';
+  textSummary += '   LOAD TEST RESULTS - TC-CD-003\n';
+  textSummary += '==========================================\n\n';
   
-  if (passed) {
-    console.log('✓ PASS: Load test completed successfully\n');
-  } else {
-    console.log('✗ FAIL: Performance thresholds not met\n');
+  textSummary += 'PERFORMANCE METRICS:\n';
+  textSummary += '-------------------------------------------\n';
+  for (const [key, value] of Object.entries(summary)) {
+    const unit = key.includes('Time') ? ' ms' : key.includes('Errors') ? '%' : '';
+    textSummary += `  ${key.padEnd(25)}: ${value}${unit}\n`;
   }
+  textSummary += '-------------------------------------------\n\n';
+  
+  // Thresholds check
+  textSummary += 'THRESHOLD CHECKS:\n';
+  textSummary += '-------------------------------------------\n';
+  const errorRate = metrics.http_req_failed?.values?.rate ?? 1;
+  const p95Duration = metrics.http_req_duration?.values?.['p(95)'] ?? 9999;
+  
+  textSummary += `  Error Rate < 10%          : ${errorRate < 0.1 ? '✓ PASS' : '✗ FAIL'} (${(errorRate * 100).toFixed(2)}%)\n`;
+  textSummary += `  P95 Response < 3000ms     : ${p95Duration < 3000 ? '✓ PASS' : '✗ FAIL'} (${p95Duration.toFixed(2)}ms)\n`;
+  textSummary += '-------------------------------------------\n\n';
+  
+  const passed = errorRate < 0.1 && p95Duration < 3000;
+  textSummary += `OVERALL RESULT: ${passed ? '✓ PASS' : '✗ FAIL'}\n`;
+  textSummary += '==========================================\n';
   
   return {
-    'stdout': JSON.stringify(data, null, 2),
-    'summary.json': JSON.stringify(data),
+    'stdout': textSummary,
   };
 }
