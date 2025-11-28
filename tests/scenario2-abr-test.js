@@ -38,16 +38,6 @@ async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function getQualityFromConsole(page) {
-  // Get the last stats log from console
-  const stats = await page.evaluate(() => {
-    // This accesses the last console log if available
-    // In practice, we'd need to track this differently
-    return window.lastStatsLog || null;
-  });
-  return stats;
-}
-
 async function runTest() {
   log('==========================================', 'blue');
   log('TC-CD-002: Network Latency ABR Test', 'blue');
@@ -99,7 +89,18 @@ async function runTest() {
     await videoButtons[0].click(); // Click video1
     log('✓ Video selected', 'green');
 
-    await sleep(2000);
+    await sleep(1000);
+
+    // Play the video (it doesn't autoplay)
+    await page.evaluate(() => {
+      const video = document.querySelector('#videoPlayer');
+      if (video) {
+        video.play();
+      }
+    });
+    log('✓ Video playing', 'green');
+
+    await sleep(2000); // Let video start buffering
 
     // Click Auto button
     await page.waitForSelector('#quality-buttons button');
@@ -140,7 +141,7 @@ async function runTest() {
     });
     log('✓ Network throttled to Regular 3G (750 kbps)', 'green');
 
-    await sleep(8000); // Wait for ABR to detect and switch
+    await sleep(10000); // Wait for ABR to detect and switch
 
     const throttledQuality = await page.evaluate(() => {
       const indicator = document.querySelector('#current-quality');
@@ -181,7 +182,7 @@ async function runTest() {
     });
     log('✓ Network throttling removed', 'green');
 
-    await sleep(8000); // Wait for ABR to switch up
+    await sleep(15000); // Wait for ABR to switch up
 
     const recoveredQuality = await page.evaluate(() => {
       const indicator = document.querySelector('#current-quality');
