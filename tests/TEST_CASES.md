@@ -35,14 +35,15 @@ Verify that the system gracefully handles missing video segments and observe how
 | 1 | Navigate to `http://localhost:8000` | Homepage loads successfully |
 | 2 | Open Browser DevTools (F12) → Console & Network tabs | DevTools open and recording |
 | 3 | Click "video1" button | Video starts loading |
-| 4 | Verify initial playback | Video plays normally at 720p |
-| 5 | **Delete segment file:**<br/>`rm apps/streaming-service/videos_dash/video1/chunk-stream0-00005.m4s` | File deleted from disk |
-| 6 | Let video play to ~10 seconds | Video continues playing segments 1-4 |
-| 7 | Observe at segment 5 request | Player attempts to fetch missing segment |
-| 8 | Check Network tab | HTTP 404 error for `chunk-stream0-00005.m4s` |
-| 9 | Check Console logs | `PLAYBACK_ERROR` event logged or buffering |
-| 10 | Observe player behavior | Player either: <br/>- Skips to next segment<br/>- Shows buffering spinner<br/>- Switches to lower quality (240p) |
-| 11 | Check streaming-service logs | 404 error logged in terminal |
+| 4 | **Select manual quality:** Click "720p" button | Quality locked to 720p (not Auto) |
+| 5 | Verify initial playback | Video plays normally at 720p |
+| 6 | **Delete segment file:**<br/>`rm apps/streaming-service/videos_dash/video1/chunk-stream0-00005.m4s` | File deleted from disk |
+| 7 | Let video play to ~10 seconds | Video continues playing segments 1-4 |
+| 8 | Observe at segment 5 request | Player attempts to fetch missing segment |
+| 9 | Check Network tab | HTTP 404 error for `chunk-stream0-00005.m4s` (multiple retry attempts) |
+| 10 | Check Console logs | Error messages or fragment loading failures |
+| 11 | Observe player behavior | Player behavior varies - may buffer, stall, or attempt recovery |
+| 12 | Check streaming-service logs | Multiple 404 errors logged in terminal |
 
 ### Expected Results
 
@@ -56,25 +57,28 @@ Verify that the system gracefully handles missing video segments and observe how
 - Service continues serving other segments
 
 **Application Domain:**
-- Player does NOT crash or freeze
-- One of the following behaviors:
-  - Skips missing segment and continues
-  - Buffers and retries 2-3 times
-  - Custom ABR switches to 240p if errors persist
-- Console shows: `PLAYBACK_ERROR` or similar event
+- Player does NOT crash or freeze the browser
+- Player attempts to retry the missing segment multiple times
+- **Known limitation**: Player may stall indefinitely at the missing segment
+- Console shows repeated fragment loading attempts
+- User can manually seek forward to skip the problematic segment
 
 ### Pass Criteria
-✅ Player does not crash  
-✅ 404 error appears in Network tab  
+✅ Player does not crash or freeze the browser  
+✅ 404 error appears in Network tab (multiple retries visible)  
 ✅ Error logged in streaming-service terminal  
-✅ Video playback continues (skip or switch quality)  
-✅ No infinite retry loop  
+✅ Service can serving other segments if user seek forward to skip the problematic segment  
+✅ No browser tab crash  
 
 ### Fail Criteria
-❌ Player freezes permanently  
+❌ Browser tab crashes or becomes unresponsive  
 ❌ Service crashes  
-❌ Browser tab becomes unresponsive  
-❌ Infinite retry storm (> 10 requests/second for same segment)  
+❌ Server runs out of resources from retry storm  
+
+### Known Limitations
+⚠️ **Automatic recovery**: dash.js does not automatically skip missing segments  
+⚠️ **User intervention required**: User must manually seek forward to continue playback  
+⚠️ **This is expected behavior** for most DASH players without custom error handling  
 
 ### Post-conditions
 Restore missing segment:
