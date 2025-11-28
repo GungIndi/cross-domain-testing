@@ -104,8 +104,18 @@ else
     echo -e "${RED}✗ Segment 00006 failed: $RESPONSE${NC}"
 fi
 
-# Restore from backup
+# Wait for user to test in browser
 echo ""
+echo -e "${YELLOW}[MANUAL TEST]${NC} Now test in browser:"
+echo "1. Open http://localhost:8000"
+echo "2. Click '720p' quality button (use manual quality, not Auto)"
+echo "3. Play video1 and observe during segment 5 (~10 seconds playback)"
+echo "4. Check network tab for 404 error when accessing $SEGMENT_TO_DELETE"
+echo ""
+read -p "Press ENTER when ready to restore the segment..." -r
+echo ""
+
+# Restore from backup
 echo -e "${YELLOW}[RESTORE]${NC} Restoring from backup..."
 cp -r "$BACKUP_PATH"/* "apps/streaming-service/videos_dash/$VIDEO/"
 
@@ -141,9 +151,4 @@ echo "✓ Service does not crash"
 echo "✓ Segment restored successfully"
 echo ""
 echo -e "${GREEN}PASS: Missing Segment Test Completed${NC}"
-echo ""
-echo "Next steps:"
-echo "1. Open browser at http://localhost:8000"
-echo "2. Play $VIDEO and observe player behavior during segment 5"
-echo "3. Check browser console for PLAYBACK_ERROR events"
-echo ""
+
