@@ -6,7 +6,7 @@
 set -e
 
 # Configuration
-PROJECT_ID="${GCP_PROJECT_ID:-your-project-id}"
+PROJECT_ID="${GCP_PROJECT_ID:-tugas-akhir-445003}"
 REGION="${GCP_REGION:-us-central1}"
 IMAGE_PREFIX="gcr.io/${PROJECT_ID}"
 
@@ -65,27 +65,21 @@ echo ""
 
 # Frontend
 echo -e "${YELLOW}[BUILD]${NC} Building frontend image..."
-cd frontend
-gcloud builds submit --tag ${IMAGE_PREFIX}/frontend:latest .
-cd ..
+gcloud builds submit --tag ${IMAGE_PREFIX}/frontend:latest ../frontend
 echo -e "${GREEN}✓ Frontend image built${NC}"
 
 # Catalog Service
 echo -e "${YELLOW}[BUILD]${NC} Building catalog service image..."
-cd apps/video-catalog-service
-gcloud builds submit --tag ${IMAGE_PREFIX}/catalog-service:latest .
-cd ../..
+gcloud builds submit --tag ${IMAGE_PREFIX}/catalog-service:latest ../apps/video-catalog-service
 echo -e "${GREEN}✓ Catalog service image built${NC}"
 
 # Streaming Service
 echo -e "${YELLOW}[BUILD]${NC} Building streaming service image..."
-cd apps/streaming-service
-gcloud builds submit --tag ${IMAGE_PREFIX}/streaming-service:latest .
-cd ../..
+gcloud builds submit --tag ${IMAGE_PREFIX}/streaming-service:latest ../apps/streaming-service
 echo -e "${GREEN}✓ Streaming service image built${NC}"
 
 # ============================================================
-# 2. Deploy to Cloud Run
+# 2. Deploy to Cloud Run (in dependency order)
 # ============================================================
 
 echo ""
@@ -94,7 +88,7 @@ echo "  Deploying to Cloud Run"
 echo "==========================================${NC}"
 echo ""
 
-# Deploy Streaming Service (most important for autoscaling test)
+# Deploy Streaming Service FIRST (no dependencies)
 echo -e "${YELLOW}[DEPLOY]${NC} Deploying streaming service..."
 gcloud run deploy streaming-service \
   --image ${IMAGE_PREFIX}/streaming-service:latest \
@@ -104,11 +98,10 @@ gcloud run deploy streaming-service \
   --port 8080 \
   --memory 512Mi \
   --cpu 1 \
-  --min-instances 0 \
-  --max-instances 10 \
-  --concurrency 80 \
+  --min-instances 1 \
+  --max-instances 3 \
+  --concurrency 5 \
   --timeout 300 \
-  --set-env-vars "PORT=8080"
 
 STREAMING_URL=$(gcloud run services describe streaming-service \
   --platform managed \
@@ -118,9 +111,9 @@ STREAMING_URL=$(gcloud run services describe streaming-service \
 echo -e "${GREEN}✓ Streaming service deployed${NC}"
 echo -e "  URL: ${STREAMING_URL}"
 
-# Deploy Catalog Service
+# Deploy Catalog Service SECOND (depends on streaming service)
 echo ""
-echo -e "${YELLOW}[DEPLOY]${NC} Deploying catalog service..."
+echo -e "${YELLOW}[DEPLOY]${NC} Deploying catalog service with STREAMING_URL=${STREAMING_URL}..."
 gcloud run deploy catalog-service \
   --image ${IMAGE_PREFIX}/catalog-service:latest \
   --platform managed \
@@ -130,10 +123,10 @@ gcloud run deploy catalog-service \
   --memory 256Mi \
   --cpu 1 \
   --min-instances 0 \
-  --max-instances 5 \
-  --concurrency 80 \
+  --max-instances 3 \
+  --concurrency 5 \
   --timeout 60 \
-  --set-env-vars "PORT=8080"
+  --set-env-vars "STREAMING_URL=${STREAMING_URL}"
 
 CATALOG_URL=$(gcloud run services describe catalog-service \
   --platform managed \
@@ -143,9 +136,9 @@ CATALOG_URL=$(gcloud run services describe catalog-service \
 echo -e "${GREEN}✓ Catalog service deployed${NC}"
 echo -e "  URL: ${CATALOG_URL}"
 
-# Deploy Frontend
+# Deploy Frontend LAST (depends on catalog service)
 echo ""
-echo -e "${YELLOW}[DEPLOY]${NC} Deploying frontend service..."
+echo -e "${YELLOW}[DEPLOY]${NC} Deploying frontend service with CATALOG_URL=${CATALOG_URL}..."
 gcloud run deploy frontend \
   --image ${IMAGE_PREFIX}/frontend:latest \
   --platform managed \
@@ -156,9 +149,9 @@ gcloud run deploy frontend \
   --cpu 1 \
   --min-instances 0 \
   --max-instances 3 \
-  --concurrency 80 \
+  --concurrency 3 \
   --timeout 60 \
-  --set-env-vars "PORT=8080,CATALOG_URL=${CATALOG_URL},STREAMING_URL=${STREAMING_URL}"
+  --set-env-vars "CATALOG_URL=${CATALOG_URL}"
 
 FRONTEND_URL=$(gcloud run services describe frontend \
   --platform managed \
@@ -169,14 +162,11 @@ echo -e "${GREEN}✓ Frontend service deployed${NC}"
 echo -e "  URL: ${FRONTEND_URL}"
 
 # ============================================================
-# 3. Update Frontend Config
+# 3. Deployment Complete
 # ============================================================
 
 echo ""
-echo -e "${YELLOW}[NOTE]${NC} Update frontend app.js with Cloud Run URLs:"
-echo ""
-echo "CATALOG_URL: ${CATALOG_URL}"
-echo "STREAMING_URL: ${STREAMING_URL}"
+echo -e "${GREEN}[SUCCESS]${NC} All services deployed with correct environment variables!"
 echo ""
 
 # ============================================================
