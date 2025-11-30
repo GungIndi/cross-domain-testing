@@ -4,7 +4,7 @@
 .PHONY: help build run test deploy clean docker
 
 # Configuration
-GCP_PROJECT_ID ?= your-project-id
+GCP_PROJECT_ID ?= tugas-akhir-445003
 GCP_REGION ?= us-central1
 STREAMING_URL ?= http://localhost:8081
 
@@ -28,7 +28,7 @@ install-deps: ## Install all dependencies (Node.js, k6, Puppeteer)
 	@command -v node >/dev/null 2>&1 || (echo "$(YELLOW)Please install Node.js first$(NC)" && exit 1)
 	@npm install puppeteer
 	@echo "$(GREEN)✓ Puppeteer installed$(NC)"
-	@command -v k6 >/dev/null 2>&1 || (echo "$(YELLOW)Please install k6: https://k6.io/docs/getting-started/installation/$(NC)")
+	@command -v k6 >/dev/null 2>&1 || (echo "$(YELLOW)Please install k6: https://grafana.com/docs/k6/latest/set-up/install-k6/$(NC)")
 
 run-frontend: ## Run frontend service on port 8000
 	@echo "$(BLUE)Starting frontend service...$(NC)"
@@ -105,12 +105,14 @@ test-abr: ## Run Scenario 2: ABR/Network Latency test
 	@echo "$(BLUE)Running Scenario 2: Network Latency / ABR$(NC)"
 	@node tests/scenario2-abr-test.js
 
-test-load: ## Run Scenario 3: Load test with k6
+test-load: ## Run Scenario 3: Load test with k6 (aggressive for autoscaling)
 	@echo "$(BLUE)Running Scenario 3: Load Test$(NC)"
+	@echo "$(YELLOW)Aggressive load - designed to trigger autoscaling$(NC)"
 	@k6 run tests/scenario3-load-test.js
 
 test-load-cloud: ## Run load test against Cloud Run deployment
 	@echo "$(BLUE)Running load test against Cloud Run$(NC)"
+	@echo "$(YELLOW)Monitor Cloud Console for autoscaling!$(NC)"
 	@BASE_URL=$(STREAMING_URL) k6 run tests/scenario3-load-test.js
 
 ##@ Cloud Run Deployment
@@ -131,9 +133,9 @@ deploy-streaming: ## Deploy only streaming service to Cloud Run
 		--port 8080 \
 		--memory 512Mi \
 		--cpu 1 \
-		--min-instances 0 \
-		--max-instances 10 \
-		--concurrency 80
+		--min-instances 1 \
+		--max-instances 3 \
+		--concurrency 5
 
 deploy-frontend: ## Deploy only frontend to Cloud Run
 	@echo "$(BLUE)Deploying frontend...$(NC)"
