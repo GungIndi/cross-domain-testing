@@ -11,11 +11,11 @@ echo ""
 
 # Build all images
 echo "[BUILD] Building Docker images..."
-docker-compose build
+docker compose build
 
 echo ""
 echo "[START] Starting services..."
-docker-compose up -d
+docker compose up -d
 
 echo ""
 echo "Waiting for services to be ready..."
@@ -57,8 +57,8 @@ echo "  Catalog:  http://localhost:8080/videos"
 echo "  Streaming: http://localhost:8081/stream/video1/stream.mpd"
 echo ""
 echo "View logs:"
-echo "  docker-compose logs -f"
+echo "  docker compose logs -f"
 echo ""
 echo "Stop services:"
-echo "  docker-compose down"
+echo "  docker compose down"
 echo ""
